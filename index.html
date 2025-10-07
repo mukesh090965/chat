@@ -4,10 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Go chat 🚀</title>
+    <title>My Varsha chat 🚀</title>
+    <!-- <link rel="stylesheet" href="message.css" /> -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 </head>
 
 <body>
+    <h3 style="text-align: center;">Varsha/Mukesh</h3>
+     <div id="msg-box">
+    </div>
     <div style="display: flex;flex-direction: column;">
         <div id="inputs">
             <form onsubmit="handleSubmit(event)" method="post">
@@ -18,24 +23,48 @@
         </div>
         <div id="messages" style="display: flex;flex-direction: column;"></div>
     </div>
+   
 </body>
 
 <script>
 
     const websocket = new WebSocket("wss://chat-varsha2.onrender.com/ws");
-
+    let i =0 
     function handleSubmit(e) {
         e.preventDefault();
+        i = 1;
         websocket.send(JSON.stringify({
             "from": e.target.username.value,
             "message": e.target.message.value
         }))
+        $("#message").val("")
     }
-
     websocket.onmessage = function (event) {
         const message = JSON.parse(event.data)
-        messages.innerHTML += `<p><b>${message.from}</b> says ${message.message}</p>`
+        const m2 = document.getElementById("msg-box")
+        if (i == 1){
+            m2.innerHTML += `<p class="msg-sent"> ${message.message}</p>`
+        }else{
+            m2.innerHTML += `<p class="msg-receive"> ${message.message}</p>`
+        }
+        i = 0
     }
 </script>
+<style>
+    #msg-box{
+            height: 60vh;
+    overflow: scroll;
+    }
+    .msg-sent{
+    border-radius: 7px;
+    padding-right:37px;
+    background: #7be37b;
+}
+.msg-receive{
+    border-radius: 7px;
+    padding-left:37px;
+    background: #e3cf88;
+}
+</style>
 
 </html>
