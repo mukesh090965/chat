@@ -18,6 +18,7 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 COPY --from=builder /app/index.html ./index.html 
+COPY --from=builder /app/message.css ./message.css 
 
 # Copy the built binary from the builder stage
 COPY --from=builder /main .
