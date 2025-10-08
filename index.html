@@ -5,66 +5,78 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Varsha chat 🚀</title>
-    <!-- <link rel="stylesheet" href="message.css" /> -->
+    <link rel="stylesheet" href="/msg-css" />
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 </head>
 
 <body>
-    <h3 style="text-align: center;">Varsha/Mukesh</h3>
+
+    <div class="chat-container">
+        <div class="chat-header">Hello Varsha..</div>
+        <div class="chat-messages" id="msg-box">
+            
+        </div>
+        <div class="chat-input">
+            <input type="text" id="message" placeholder="Type your message...">
+            <button onclick="handleSubmit(event)">Send</button>
+        </div>
+    </div>
+
+    <!-- <h3 style="text-align: center;">Varsha/Mukesh</h3>
      <div id="msg-box">
     </div>
     <div style="display: flex;flex-direction: column;">
         <div id="inputs">
             <form onsubmit="handleSubmit(event)" method="post">
-                <input id="username" type="text" name="username" placeholder="username" required>
                 <input id="message" type="text" name="message" placeholder="what's on your mind ?" required>
                 <input type="submit" value="Send">
             </form>
         </div>
         <div id="messages" style="display: flex;flex-direction: column;"></div>
-    </div>
+    </div> -->
    
 </body>
 
 <script>
+    let mmetingId;
+    let userName;
+    do {
+        mmetingId = prompt("Enter Meeting Id :");
+    } while ( (!/^[a-zA-Z0-9]+$/.test(mmetingId) && mmetingId !== null) || !mmetingId );
 
-    const websocket = new WebSocket("wss://chat-varsha2.onrender.com/ws");
+    do {
+        userName = prompt("Enter Your Name");
+    } while ( (!/^[a-zA-Z0-9]+$/.test(userName) && userName !== null) || !userName );
+   
+    const websocket = new WebSocket("wss://chat-varsha2.onrender.com/ws?coupe_id="+mmetingId);
     let i =0 
     function handleSubmit(e) {
         e.preventDefault();
         i = 1;
         websocket.send(JSON.stringify({
-            "from": e.target.username.value,
-            "message": e.target.message.value
+            "from": userName,
+            "message": document.getElementById("message").value,
+            "to": mmetingId
         }))
-        $("#message").val("")
+        
+        document.getElementById("message").value = ""
     }
     websocket.onmessage = function (event) {
         const message = JSON.parse(event.data)
         const m2 = document.getElementById("msg-box")
         if (i == 1){
-            m2.innerHTML += `<p class="msg-sent"> ${message.message}</p>`
+            // m2.innerHTML += `<p class="msg-sent"> ${message.message}</p>`
+            m2.innerHTML += `<div class="message sent">
+                                <div class="content">${message.message}</div>
+                            </div>`
         }else{
-            m2.innerHTML += `<p class="msg-receive"> ${message.message}</p>`
+            //m2.innerHTML += `<p class="msg-receive"><b>${ (message.users>2) ? message.from : "" } says: </b> ${message.message}</p>`
+            m2.innerHTML += `<div class="message received">
+                                <div class="content"><b>${ (message.users>2) ? message.from+" says:" : "" } </b> ${message.message}</div>
+                            </div>`
         }
         i = 0
     }
 </script>
-<style>
-    #msg-box{
-            height: 60vh;
-    overflow: scroll;
-    }
-    .msg-sent{
-    border-radius: 7px;
-    padding-right:37px;
-    background: #7be37b;
-}
-.msg-receive{
-    border-radius: 7px;
-    padding-left:37px;
-    background: #e3cf88;
-}
-</style>
 
 </html>
