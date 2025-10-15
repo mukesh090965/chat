@@ -1,77 +1,123 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
+	"sync"
 
-	"github.com/gin-gonic/gin"
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
-func main() {
-	router := gin.Default()
-	router.StaticFile("/", "index.html")
-	router.StaticFile("/msg-css", "message.css")
-	router.GET("/ws", serveWs)
-	//fmt.Println("No of connections ")
-	err := router.Run()
-	if err != nil {
-		log.Fatalf("Unable to start server. Error %v", err)
-	}
-	log.Println("Server started successfully.")
+type Message struct {
+	From    string `json:"from"`
+	Message string `json:"message"`
 }
 
-var userId string
+type Client struct {
+	conn     *websocket.Conn
+	coupeID  string
+	sendChan chan Message
+}
 
-func serveWs(c *gin.Context) {
+var (
+	upgrader    = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	clients     = make(map[string]map[*Client]bool) // coupeID -> set of clients
+	clientsLock = sync.RWMutex{}
+)
 
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	//fmt.Println("c.Request --------------------- ", c.Query("coupe_id"))
-	if err != nil {
-		log.Printf("Error in upgrading web socket. Error: %v", err)
+func main() {
+	router := mux.NewRouter()
+	router.HandleFunc("/ws", handleWebSocket)
+
+	log.Println("Server started on :8080")
+	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	coupeID := r.URL.Query().Get("coupe_id")
+	if coupeID == "" {
+		http.Error(w, "Missing coupe_id", http.StatusBadRequest)
 		return
 	}
-	userId = c.Query("coupe_id")
-	go handleClient(conn)
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("WebSocket upgrade failed:", err)
+		return
+	}
+
+	client := &Client{
+		conn:     conn,
+		coupeID:  coupeID,
+		sendChan: make(chan Message),
+	}
+
+	clientsLock.Lock()
+	if clients[coupeID] == nil {
+		clients[coupeID] = make(map[*Client]bool)
+	}
+	clients[coupeID][client] = true
+	clientsLock.Unlock()
+
+	log.Printf("New client connected for coupe_id: %s\n", coupeID)
+
+	go client.readMessages()
+	go client.writeMessages()
 }
 
-var clients = make(map[*websocket.Conn]struct{})
-var client = make(map[string][]*websocket.Conn)
+func (c *Client) readMessages() {
+	defer c.disconnect()
 
-type Message struct {
-	From     string `json:"from"`
-	Message  string `json:"message"`
-	SentTo   string `json:"to"`
-	NoOfConn int    `json:"users"`
-}
-
-func handleClient(c *websocket.Conn) {
-	defer func() {
-		delete(clients, c)
-		log.Println("Closing Websocket")
-		c.Close()
-	}()
-	clients[c] = struct{}{}
-	client[userId] = append(client[userId], c)
 	for {
 		var msg Message
-		err := c.ReadJSON(&msg)
+		err := c.conn.ReadJSON(&msg)
 		if err != nil {
-			log.Printf("Error in reading json message. Error : %v", err)
-			return
+			log.Println("Read error:", err)
+			break
 		}
-		fmt.Println("msg", msg)
-		// process the message
-		broadcast(msg)
+
+		log.Printf("[%s] From %s: %s\n", c.coupeID, msg.From, msg.Message)
+		broadcastMessage(c.coupeID, msg, c)
 	}
 }
 
-func broadcast(msg Message) {
-	msg.NoOfConn = len(client[msg.SentTo])
+func (c *Client) writeMessages() {
+	for msg := range c.sendChan {
+		err := c.conn.WriteJSON(msg)
+		if err != nil {
+			log.Println("Write error:", err)
+			break
+		}
+	}
+}
 
-	for _, conn := range client[msg.SentTo] {
-		conn.WriteJSON(msg)
+func (c *Client) disconnect() {
+	log.Printf("Client disconnected from coupe_id: %s\n", c.coupeID)
+
+	clientsLock.Lock()
+	delete(clients[c.coupeID], c)
+	if len(clients[c.coupeID]) == 0 {
+		delete(clients, c.coupeID)
+	}
+	clientsLock.Unlock()
+
+	c.conn.Close()
+	close(c.sendChan)
+}
+
+func broadcastMessage(coupeID string, msg Message, sender *Client) {
+	clientsLock.RLock()
+	defer clientsLock.RUnlock()
+
+	for client := range clients[coupeID] {
+		// Skip sender if desired; for signaling you might want to include sender
+		if client != sender {
+			select {
+			case client.sendChan <- msg:
+			default:
+				log.Println("Send channel full, skipping client")
+			}
+		}
 	}
 }
