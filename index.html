@@ -1,82 +1,100 @@
+<!-- wss://chat-varsha2.onrender.com/ws?coupe_id=test -->
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Varsha chat 🚀</title>
-    <link rel="stylesheet" href="/msg-css" />
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-</head>
-
-<body>
-
-    <div class="chat-container">
-        <div class="chat-header">Hello Varsha..</div>
-        <div class="chat-messages" id="msg-box">
-            
-        </div>
-        <div class="chat-input">
-            <input type="text" id="message" placeholder="Type your message...">
-            <button onclick="handleSubmit(event)">Send</button>
-        </div>
-    </div>
-
-    <!-- <h3 style="text-align: center;">Varsha/Mukesh</h3>
-     <div id="msg-box">
-    </div>
-    <div style="display: flex;flex-direction: column;">
-        <div id="inputs">
-            <form onsubmit="handleSubmit(event)" method="post">
-                <input id="message" type="text" name="message" placeholder="what's on your mind ?" required>
-                <input type="submit" value="Send">
-            </form>
-        </div>
-        <div id="messages" style="display: flex;flex-direction: column;"></div>
-    </div> -->
-   
-</body>
-
-<script>
-    let mmetingId;
-    let userName;
-    do {
-        mmetingId = prompt("Enter Meeting Id :");
-    } while ( (!/^[a-zA-Z0-9]+$/.test(mmetingId) && mmetingId !== null) || !mmetingId );
-
-    do {
-        userName = prompt("Enter Your Name");
-    } while ( (!/^[a-zA-Z0-9]+$/.test(userName) && userName !== null) || !userName );
-   
-    const websocket = new WebSocket("wss://chat-varsha2.onrender.com/ws?coupe_id="+mmetingId);
-    let i =0 
-    function handleSubmit(e) {
-        e.preventDefault();
-        i = 1;
-        websocket.send(JSON.stringify({
-            "from": userName,
-            "message": document.getElementById("message").value,
-            "to": mmetingId
-        }))
-        
-        document.getElementById("message").value = ""
-    }
-    websocket.onmessage = function (event) {
-        const message = JSON.parse(event.data)
-        const m2 = document.getElementById("msg-box")
-        if (i == 1){
-            // m2.innerHTML += `<p class="msg-sent"> ${message.message}</p>`
-            m2.innerHTML += `<div class="message sent">
-                                <div class="content">${message.message}</div>
-                            </div>`
-        }else{
-            //m2.innerHTML += `<p class="msg-receive"><b>${ (message.users>2) ? message.from : "" } says: </b> ${message.message}</p>`
-            m2.innerHTML += `<div class="message received">
-                                <div class="content"><b>${ (message.users>2) ? message.from+" says:" : "" } </b> ${message.message}</div>
-                            </div>`
+    <title>Video Call</title>
+    <style>
+        #localVideo, #remoteVideo {
+            width: 45%;
+            border: 1px solid black;
+            margin: 5px;
         }
-        i = 0
-    }
-</script>
+    </style>
+</head>
+<body>
+    <h2>Video Call</h2>
+    <video id="localVideo" autoplay muted></video>
+    <video id="remoteVideo" autoplay></video>
 
+    <script>
+        let localStream;
+        let peerConnection;
+        const socket = new WebSocket('wss://chat-varsha2.onrender.com/ws?coupe_id=test');
+        
+        // Signaling messages for WebRTC
+        socket.onmessage = function(event) {
+            const message = JSON.parse(event.data);
+            if (message.type === 'offer') {
+                handleOffer(message);
+            } else if (message.type === 'answer') {
+                handleAnswer(message);
+            } else if (message.type === 'candidate') {
+                handleCandidate(message);
+            }
+        };
+
+        async function startVideoCall() {
+            // Get local video stream
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+
+            // Create a new peer connection
+            peerConnection = new RTCPeerConnection();
+
+            // Add local stream tracks to the peer connection
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // When a remote stream is added, display it
+            peerConnection.ontrack = function(event) {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            // Handle ICE candidates
+            peerConnection.onicecandidate = function(event) {
+                if (event.candidate) {
+                    socket.send(JSON.stringify({
+                        type: 'candidate',
+                        data: event.candidate
+                    }));
+                }
+            };
+
+            // Create an offer to send to the other peer
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            socket.send(JSON.stringify({
+                type: 'offer',
+                data: offer
+            }));
+        }
+
+        function handleOffer(message) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+            peerConnection.createAnswer().then(answer => {
+                peerConnection.setLocalDescription(answer);
+                socket.send(JSON.stringify({
+                    type: 'answer',
+                    data: answer
+                }));
+            });
+        }
+
+        function handleAnswer(message) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+        }
+
+        function handleCandidate(message) {
+            const candidate = new RTCIceCandidate(message.data);
+            peerConnection.addIceCandidate(candidate);
+        }
+
+        // Start video call when the page loads
+        window.onload = startVideoCall;
+    </script>
+</body>
 </html>

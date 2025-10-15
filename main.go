@@ -14,6 +14,7 @@ func main() {
 	router.StaticFile("/", "index.html")
 	router.StaticFile("/msg-css", "message.css")
 	router.GET("/ws", serveWs)
+	//fmt.Println("No of connections ")
 	err := router.Run()
 	if err != nil {
 		log.Fatalf("Unable to start server. Error %v", err)
@@ -27,7 +28,7 @@ func serveWs(c *gin.Context) {
 
 	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	fmt.Println("c.Request --------------------- ", c.Query("coupe_id"))
+	//fmt.Println("c.Request --------------------- ", c.Query("coupe_id"))
 	if err != nil {
 		log.Printf("Error in upgrading web socket. Error: %v", err)
 		return
@@ -69,6 +70,7 @@ func handleClient(c *websocket.Conn) {
 
 func broadcast(msg Message) {
 	msg.NoOfConn = len(client[msg.SentTo])
+
 	for _, conn := range client[msg.SentTo] {
 		conn.WriteJSON(msg)
 	}
